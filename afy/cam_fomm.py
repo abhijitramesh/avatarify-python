@@ -233,6 +233,20 @@ if __name__ == "__main__":
     ret, frame = cap.read()
     stream_img_size = frame.shape[1], frame.shape[0]
 
+    video_height = config["video"]["height"]
+    video_width = config["video"]["width"]
+
+    frame_size_live = (video_height, video_width)  # (width, height) for live video
+    frame_size_avatar = (video_height, video_width)  # (width, height) for avatarified video
+    frames_per_second = config["video"]["fps"]
+    output_live_video_path = f"{config['video']['output_file_name']}_live.avi"
+    output_avatar_video_path = f"{config['video']['output_file_name']}_avatar.avi"
+
+    fourcc = cv2.VideoWriter_fourcc(*'XVID')
+    live_video_writer = cv2.VideoWriter(output_live_video_path, fourcc, frames_per_second, frame_size_live)
+    avatar_video_writer = cv2.VideoWriter(output_avatar_video_path, fourcc, frames_per_second, frame_size_avatar)
+
+
     if enable_vcam:
         if _platform in ['linux', 'linux2']:
             try:
@@ -253,6 +267,7 @@ if __name__ == "__main__":
     avatar = None
     change_avatar(predictor, avatars[cur_ava])
     passthrough = False
+    record = False
 
     cv2.namedWindow('cam', cv2.WINDOW_GUI_NORMAL)
     cv2.moveWindow('cam', 500, 250)
@@ -272,6 +287,17 @@ if __name__ == "__main__":
     fps_hist = []
     fps = 0
     show_fps = False
+    
+    # Add "Recording" text and icon to the live preview_frame
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    text = "Recording"
+    text_org = (20, 20)  # bottom-left corner of the text
+    font_scale = 1
+    font_color = (255, 0 ,0 )
+    line_type = 2
+
+    icon_center = (200, 20)  # center of the circle
+    icon_radius = 5
 
     print_help()
 
@@ -414,6 +440,8 @@ if __name__ == "__main__":
                 change_avatar(predictor, avatars[cur_ava])
             elif key == 48:
                 passthrough = not passthrough
+            elif key == 32: #spacebar
+                record = not record
             elif key != -1:
                 log(key)
 
@@ -421,6 +449,12 @@ if __name__ == "__main__":
                 preview_frame = cv2.addWeighted( avatar, overlay_alpha, frame, 1.0 - overlay_alpha, 0.0)
             else:
                 preview_frame = frame.copy()
+            
+            if record:
+                live_frame = cv2.resize(preview_frame[..., ::-1], frame_size_live)
+                cv2.putText(preview_frame, text, text_org, font, font_scale, font_color, line_type)
+                cv2.circle(preview_frame, icon_center, icon_radius, font_color, -1)  # -1 thickness fills the circle
+                live_video_writer.write(live_frame)
 
             if show_landmarks:
                 # Dim the background to make it easier to see the landmarks
@@ -452,10 +486,12 @@ if __name__ == "__main__":
             elif show_landmarks:
                 preview_frame = draw_landmark_text(preview_frame)
 
+
             if not opt.hide_rect:
                 draw_rect(preview_frame)
 
             cv2.imshow('cam', preview_frame[..., ::-1])
+            
 
             if out is not None:
                 if not opt.no_pad:
@@ -467,8 +503,13 @@ if __name__ == "__main__":
                 if enable_vcam:
                     out = resize(out, stream_img_size)
                     stream.schedule_frame(out)
-
+                
+                
+                if record:
+                    avatar_frame = cv2.resize(out[..., ::-1], frame_size_avatar)
+                    avatar_video_writer.write(avatar_frame)
                 cv2.imshow('avatarify', out[..., ::-1])
+                
 
             fps_hist.append(tt.toc(total=True))
             if len(fps_hist) == 10:
@@ -479,7 +520,8 @@ if __name__ == "__main__":
 
     log("stopping camera")
     cap.stop()
-
+    live_video_writer.release()
+    avatar_video_writer.release()
     cv2.destroyAllWindows()
 
     if opt.is_client:
