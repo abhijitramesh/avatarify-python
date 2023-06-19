@@ -124,6 +124,7 @@ def print_help():
     info('Q: Get random avatar')
     info('X: Calibrate face pose')
     info('I: Show FPS')
+    info('SPACE: Toggle Record')
     info('ESC: Quit')
     info('\nFull key list: https://github.com/alievk/avatarify#controls')
     info('\n\n')
